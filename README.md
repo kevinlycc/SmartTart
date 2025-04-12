@@ -5,3 +5,4 @@ Bithacks 2025 Project, where we plan to build a toaster
 | Name             | Student ID | GitHub / Identifier   |
 |------------------|------------|------------------------|
 | Kevin Chhim      | 61527648   | kevinlycc              |
+| Deon Nguyen      | 51849354   | deonn1                 |
