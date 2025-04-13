@@ -5,10 +5,13 @@
 #include "pitches.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WebServer.h>
+#include <ArduinoJson.h>
 
 const char* ssid = "Michael";
 const char* password = "Ipisbest";
-const char* serverName = "http://169.234.12.169:5000/test_send";
+const char* serverName = "http://192.168.53.72:5000/stats";
+WebServer server(80);
 
 Adafruit_LSM6DSOX sox;
 
@@ -40,6 +43,10 @@ unsigned long debounceDelay = 50;
 int steps = 0;
 int toasts = 0;
 
+// Uploading to server
+unsigned long lastUploadTime = 0;
+const unsigned long uploadInterval = 10000; // upload every 10 seconds
+
 // Step timing
 unsigned long lastStepTime = 0;
 const unsigned long stepCooldown = 300; // Minimum time between steps (ms)
@@ -47,7 +54,7 @@ const unsigned long stepCooldown = 300; // Minimum time between steps (ms)
 // Toast Countdown
 bool toasting = false;
 unsigned long toastStartTime = 0;
-const unsigned long toastDuration = 30000; // 30 seconds
+const unsigned long toastDuration = 60000; // 60 seconds
 
 // Jeopardy
 int jeopardyMelody[] = {
@@ -59,35 +66,80 @@ int jeopardyMelody[] = {
   NOTE_C5, NOTE_F5, NOTE_C5,
   NOTE_AS5, 0, NOTE_G5, NOTE_F5,
   NOTE_E5, NOTE_D5, NOTE_CS5, 0,
-NOTE_A4, NOTE_F5, NOTE_C5, NOTE_A4,
+
+  // 2nd loop
+  NOTE_A4, NOTE_F5, NOTE_C5, NOTE_A4,
+  NOTE_C5, NOTE_F5, NOTE_C5, 0,
+  NOTE_C5, NOTE_F5, NOTE_C5, NOTE_F5,
+  NOTE_AS5, NOTE_G5, NOTE_F5, NOTE_E5, NOTE_D5, NOTE_CS5,
+  NOTE_C5, NOTE_F5, NOTE_C5, NOTE_A4,
+  NOTE_C5, NOTE_F5, NOTE_C5,
+  NOTE_AS5, 0, NOTE_G5, NOTE_F5,
+  NOTE_E5, NOTE_D5, NOTE_CS5, 0, 
+
+  // 3rd loop
+  NOTE_A4, NOTE_F5, NOTE_C5, NOTE_A4,
   NOTE_C5, NOTE_F5, NOTE_C5,
   NOTE_C5, NOTE_F5, NOTE_C5, NOTE_F5,
   NOTE_AS5, NOTE_G5, NOTE_F5, NOTE_E5, NOTE_D5, NOTE_CS5,
   NOTE_C5, NOTE_F5, NOTE_C5, NOTE_A4,
   NOTE_C5, NOTE_F5, NOTE_C5,
   NOTE_AS5, 0, NOTE_G5, NOTE_F5,
-  NOTE_E5, NOTE_D5, NOTE_CS5, NOTE_C5
-};
+  NOTE_E5, NOTE_D5, NOTE_CS5, 0,
 
+  // 4th loop
+  NOTE_A4, NOTE_F5, NOTE_C5, NOTE_A4,
+  NOTE_C5, NOTE_F5, NOTE_C5, 0,
+  NOTE_C5, NOTE_F5, NOTE_C5, NOTE_F5,
+  NOTE_AS5, NOTE_G5, NOTE_F5, NOTE_E5, NOTE_D5, NOTE_CS5,
+  NOTE_C5, NOTE_F5, NOTE_C5, NOTE_A4,
+  NOTE_C5, NOTE_F5, NOTE_C5,
+  NOTE_AS5, 0, NOTE_G5, NOTE_F5,
+  NOTE_E5, NOTE_D5, NOTE_CS5, 0, 
+};
 
 int jeopardyDurations[] = {
   4,    4,    4,    4,
   4,    4,          2,
   4,    4,    4,    4,
   3,   8, 8, 8, 8, 8,
-  4,    4,    4,    4, // the same again
+  4,    4,    4,    4,
   4,    4,          2,
   4, 8, 8,    4,    4,
   4,    4,    4,    4,
-4,    4,    4,    4,
+
+// 2nd loop
+  4,    4,    4,    4,
   4,    4,          2,
   4,    4,    4,    4,
   3,   8, 8, 8, 8, 8,
-  4,    4,    4,    4, // the same again
+  4,    4,    4,    4,
   4,    4,          2,
   4, 8, 8,    4,    4,
   4,    4,    4,    4,
-  0};
+
+  // 3rd loop
+  4,    4,    4,    4,
+  4,    4,          2,
+  4,    4,    4,    4,
+  3,   8, 8, 8, 8, 8,
+  4,    4,    4,    4,
+  4,    4,          2,
+  4, 8, 8,    4,    4,
+  4,    4,    4,    4,
+
+  // 4th loop
+  4,    4,    4,    4,
+  4,    4,          2,
+  4,    4,    4,    4,
+  3,   8, 8, 8, 8, 8,
+  4,    4,    4,    4,
+  4,    4,          2,
+  4, 8, 8,    4,    4,
+  4,    4,    4,    4,
+  
+  0 // End
+};
 
 int jeoIndex = 0;
 unsigned long jeoNoteStart = 0;
@@ -150,6 +202,31 @@ void setup() {
   Serial.println("Connected to WiFi!");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+
+  server.on("/set_profile", HTTP_POST, []() {
+    if (server.hasArg("plain")) {
+      String body = server.arg("plain");
+      Serial.println("Received POST body: " + body);
+
+      StaticJsonDocument<200> doc;
+      DeserializationError error = deserializeJson(doc, body);
+
+      if (!error) {
+        int duration = doc["duration"];
+        Serial.print("Toast duration: ");
+        Serial.println(duration);
+      } else {
+        Serial.println("Failed to parse JSON");
+      }
+
+      server.send(200, "application/json", "{\"status\":\"received\"}");
+    } else {
+      server.send(400, "application/json", "{\"error\":\"Missing profile\"}");
+    }
+  });
+
+  server.begin();
+  Serial.println("Server Started");
 }
 
 void loop() {
@@ -179,15 +256,15 @@ void loop() {
   }
 
   // ---- SERIAL DEBUG ----
-  Serial.print("Accel Mag: ");
-  Serial.print(magnitude, 2);
-  Serial.print(" | w/o Gravity: ");
-  Serial.print(accel_no_gravity, 2);
-  Serial.print(" | Temp: ");
-  Serial.print(tempC, 1);
-  Serial.print(" °C / ");
-  Serial.print(tempF, 1);
-  Serial.println(" °F");
+  // Serial.print("Accel Mag: ");
+  // Serial.print(magnitude, 2);
+  // Serial.print(" | w/o Gravity: ");
+  // Serial.print(accel_no_gravity, 2);
+  // Serial.print(" | Temp: ");
+  // Serial.print(tempC, 1);
+  // Serial.print(" °C / ");
+  // Serial.print(tempF, 1);
+  // Serial.println(" °F");
 
   // ---- BUTTON TOGGLE LOGIC ----
   int reading = digitalRead(Pushbutton);
@@ -224,7 +301,7 @@ void loop() {
   display.clearDisplay();
 
   if (toasting) {
-    unsigned long timeLeft = 30 - ((millis() - toastStartTime) / 1000);
+    unsigned long timeLeft = 60 - ((millis() - toastStartTime) / 1000);
     
     // Beep when 1 second remains
   if (timeLeft == 1 && !preEndBeeped) {
@@ -233,7 +310,7 @@ void loop() {
   }
     display.setTextSize(2);
     display.setCursor(0, 0);
-    display.println("TOASTING...");
+    display.println("TOASTING..");
     display.setTextSize(1);
     display.setCursor(0, 30);
     display.print("TEMP: ");
@@ -244,7 +321,7 @@ void loop() {
     display.println(timeLeft);
     display.display();
 
-     // ---- Play Für Elise during toasting ----
+     // ---- Play Jeopardy during toasting ----
     if (!jeopardyDone && jeoIndex < sizeof(jeopardyMelody) / sizeof(jeopardyMelody[0])) {
       unsigned long elapsed = millis() - toastStartTime;
 
@@ -280,32 +357,41 @@ void loop() {
     display.display();
   }
 
-  //////////WIFI///////////////////
-
+   //////////WIFI///////////////////
+  server.handleClient();
   if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    http.begin(serverName);
-    http.addHeader("Content-Type", "application/json");
+    unsigned long currentMillis = millis();
 
-    String jsonPayload = "{";
-    jsonPayload += "\"tarts\": " + String(toasts) + ",";
-    jsonPayload += "\"steps\": " + String(steps);
-    jsonPayload += "}";    
+    if (currentMillis - lastUploadTime >= uploadInterval) {
+      lastUploadTime = currentMillis;
 
-    int httpResponseCode = http.POST(jsonPayload);
+      HTTPClient http;
+      http.begin(serverName);
+      http.addHeader("Content-Type", "application/json");
 
-    if (httpResponseCode > 0) {
-      String response = http.getString();
-      Serial.println("Server response: " + response);
-    } else {
-      Serial.print("Error code: ");
-      Serial.println(httpResponseCode);
+      String jsonPayload = "{";
+      jsonPayload += "\"tarts\": " + String(toasts) + ",";
+      jsonPayload += "\"steps\": " + String(steps) + ",";
+      jsonPayload += "\"current_temp\": " + String(tempC);
+      jsonPayload += "}";    
+
+      int httpResponseCode = http.POST(jsonPayload);
+
+      if (httpResponseCode > 0) {
+        String response = http.getString();
+        Serial.println("Server response: " + response);
+      } else {
+        Serial.print("Error code: ");
+        Serial.println(httpResponseCode);
+      }
+
+      http.end();
     }
 
-    http.end();
   } else {
     Serial.println("WiFi not connected");
   }
+
 
   delay(100);
 }

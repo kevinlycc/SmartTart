@@ -223,17 +223,17 @@
     }
 
     async function fetchStats() {
-      const res = await fetch('/stats');
+      const res = await fetch('/stats_vals');
       const data = await res.json();
       const tarts = data.tarts;
       const steps = data.steps;
-      const calories = tarts * 200;
-      const burned = Math.floor(steps / 27);
-      const net = calories - burned;
+      const consumed = data.calories_consumed;
+      const burned = data.calories_spent;
+      const net = parseInt(consumed) - parseInt(burned);
 
       document.getElementById('tarts').textContent = tarts;
       document.getElementById('steps').textContent = steps;
-      document.getElementById('calories').textContent = calories;
+      document.getElementById('calories').textContent = consumed;
       document.getElementById('burned').textContent = burned;
       document.getElementById('net').textContent = net;
 
@@ -241,7 +241,7 @@
       updateTempDisplay(data.current_temp);
     }
 
-    setInterval(fetchStats, 10000);
+    setInterval(fetchStats, 5000);
     fetchStats();
 
     // Show and Hide Modal
