@@ -244,6 +244,7 @@
       .then(data => {
         console.log(data);
       });
+      getCharts();
     }
 
     async function fetchStats() {
@@ -347,6 +348,7 @@
         document.getElementById('actionButtons').style.display = 'none';
         closeModal();
       }
+      getCharts();
     }
 
     function retryListening() {
@@ -502,7 +504,7 @@
         });
     }
 
-    setInterval(getCharts, 10000);
+    setInterval(getCharts, 30000);
     getCharts();
   </script>
 </body>
