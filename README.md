@@ -12,3 +12,7 @@ Bithacks 2025 Project, where we built a toaster
 ## 💸 BOM
 
 [SmartTart BOM](https://docs.google.com/spreadsheets/d/14kIpqul2QsvKK6hXvNmqvoDM4Ec8LViVsGaJ6Tq-GcU/edit?usp=sharing)
+
+## 📽️ Demo Video
+
+[SmartTart BOM](https://youtu.be/d21QCl19_SU)
