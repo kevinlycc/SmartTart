@@ -10,6 +10,7 @@
 
 const char* ssid = "Michael";
 const char* password = "Ipisbest";
+//const char* serverName = "http://169.234.12.169:5000/stats";
 const char* serverName = "http://192.168.53.72:5000/stats";
 WebServer server(80);
 
@@ -24,7 +25,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 const int buzzerPin = 10;
 bool preEndBeeped = false;
 
-// ZTP-115M
+// Temp Sensor - ZTP-115M
 const int sensorPin = 6;  // Analog pin
 float voltage, tempC, tempF;
 
@@ -196,13 +197,13 @@ void setup() {
     while (true);
   }
 
-  // LSM6DSOX
+  // Accelerometer - LSM6DSOX
   if (!sox.begin_I2C()) {
     Serial.println("Failed to find LSM6DSOX chip");
     while (1) delay(10);
   }
 
-  // Initial display
+  // Initial display - Screen 1
   display.clearDisplay();
   display.setTextSize(2);
   display.setTextColor(SSD1306_WHITE);
@@ -334,7 +335,8 @@ void loop() {
       tone(buzzerPin, 1500, 200); // Higher pitch for ending
       preEndBeeped = true;
     }
-    
+
+  // Toasting display - Screen 2
     display.setTextSize(2);
     display.setCursor(0, 0);
     display.println("TOASTING..");
