@@ -14,16 +14,6 @@ CURRENT_TEMP = 0
 CALORIES_SPENT = 0
 CALORIES_CONSUMED = 0
 
-# def log_toast(profile, duration):
-#     now = datetime.now().isoformat()
-#     with sqlite3.connect(DB_FILE) as conn:
-#         cursor = conn.cursor()
-#         cursor.execute("INSERT INTO toast_history (time, profile, duration) VALUES (?, ?, ?)",
-#                        (now, profile, duration))
-#         cursor.execute("INSERT INTO calorie_log (timestamp, consumed, spent) VALUES (?, ?, ?)",
-#                        (now, 200, 0))  # calories spent will be updated in /stats
-#         conn.commit()
-
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -34,16 +24,23 @@ def set_profile():
     profile = data.get("profile")
 
     if profile == "light":
-        duration = 30
-    elif profile == "medium":
         duration = 60
+    elif profile == "medium":
+        duration = 120
     elif profile == "crispy":
-        duration = 90
+        duration = 180
     else:
         duration = int(profile)
     
     global TARTS
     TARTS += 1
+
+    now = datetime.now().isoformat()
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO toast_history (time, duration) VALUES (?, ?)",
+                       (now, duration))
+        conn.commit()
 
     # Send updated profile to the ESP32
     esp32_ip = "http://192.168.53.49"  # Replace with the ESP32 IP
@@ -64,11 +61,19 @@ def stats():
     current_temp = data.get("current_temp")
 
     global TARTS, STEPS, CALORIES_CONSUMED, CALORIES_SPENT, CURRENT_TEMP
-    TARTS = tarts
+    TARTS = tarts if tarts > TARTS else TARTS
     STEPS = steps
     CALORIES_SPENT = int(STEPS / 27)
     CALORIES_CONSUMED = TARTS * 200
     CURRENT_TEMP = current_temp
+
+    net_cals = CALORIES_CONSUMED - CALORIES_SPENT
+    now = datetime.now().isoformat()
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO calorie_log (time, calories) VALUES (?, ?)",
+                       (now, net_cals))
+        conn.commit()
 
     return jsonify({
         "tarts": TARTS,
@@ -87,37 +92,27 @@ def stats_vals():
         "current_temp": round(CURRENT_TEMP, 1),
     }) 
 
-# @app.route("/history")
-# def history():
-#     with sqlite3.connect(DB_FILE) as conn:
-#         cursor = conn.cursor()
-#         cursor.execute("SELECT time, profile, duration FROM toast_history ORDER BY time DESC")
-#         rows = cursor.fetchall()
-#         return jsonify([
-#             {"time": row[0], "profile": row[1], "duration": row[2]}
-#             for row in rows
-#         ])
+@app.route("/history")
+def history():
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT time, duration FROM toast_history ORDER BY time DESC")
+        rows = cursor.fetchall()
+        return jsonify([
+            {"time": row[0], "duration": row[1]}
+            for row in rows
+        ])
     
-# @app.route("/calories_graph")
-# def calories_graph():
-#     with sqlite3.connect(DB_FILE) as conn:
-#         cursor = conn.cursor()
-#         cursor.execute("SELECT timestamp, SUM(consumed), SUM(spent) FROM calorie_log GROUP BY timestamp ORDER BY timestamp")
-#         rows = cursor.fetchall()
-#         return jsonify([
-#             {"time": row[0], "consumed": row[1], "spent": row[2]}
-#             for row in rows
-#         ])
-
-
-# @app.route("/update_steps", methods=["POST"])
-# def update_steps():
-#     data = request.get_json()
-#     steps = data.get("steps", 0)
-#     if isinstance(steps, int) and steps > 0:
-#         state["steps"] += steps
-#         return jsonify({"status": "steps updated"}), 200
-#     return jsonify({"error": "invalid step data"}), 400
+@app.route("/calories_graph")
+def calories_graph():
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT time, calories FROM calorie_log GROUP BY time ORDER BY time")
+        rows = cursor.fetchall()
+        return jsonify([
+            {"time": row[0], "calories": row[1]}
+            for row in rows
+        ])
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

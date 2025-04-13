@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Smart Tart</title>
@@ -179,15 +180,38 @@
       </div>
     </div>
 
-
-    <div class="card">
-      <h2>Toasting Stats</h2>
-      <p>Poptarts Toasted: <span id="tarts">0</span></p>
-      <p>Calories Consumed: <span id="calories">0</span> kcal</p>
-      <p>Steps Walked: <span id="steps">0</span></p>
-      <p>Calories Burned: <span id="burned">0</span> kcal</p>
-      <p>Net Calories: <span id="net">0</span> kcal</p>
-    </div>
+    <div class="card" style="display: flex; flex-direction: row; gap: 20px; align-items: flex-start;">
+      <!-- Left side: stats -->
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; height: 100%;">
+        <h2>Toasting Stats</h2>
+        <p>Poptarts Toasted: <span id="tarts">0</span></p>
+        <p>Calories Consumed: <span id="calories">0</span> kcal</p>
+        <p>Steps Walked: <span id="steps">0</span></p>
+        <p>Calories Burned: <span id="burned">0</span> kcal</p>
+        <p>Net Calories: <span id="net">0</span> kcal</p>
+      </div>
+    
+      <!-- Right side: table and chart stacked -->
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
+        <div>
+          <h3>Toast History</h3>
+          <table id="toast-history" border="1" style="width:100%;">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Duration (s)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+    
+        <div>
+          <h3>Calories Over Time</h3>
+          <canvas id="calorieChart" width="100%" height="50%"></canvas>
+        </div>
+      </div>
+    </div>    
 
     <div class="card">
       <h2>Temperature Control</h2>
@@ -334,7 +358,7 @@
     }
     async function handleVoiceCommand(command) {
       // Create a prompt that instructs Gemini how to process the command
-      const prompt = `You are being used to generate json outputs from strings. You will be given a user-made string describing some toast level. You will have to decide based on the user input how long to toast for. Minimum 15 seconds, maximum 120 seconds. You should only respond with json. Example: 'Make it extra crispy' results in {duration: 120}.
+      const prompt = `You are being used to generate json outputs from strings. You will be given a user-made string describing some toast level. You will have to decide based on the user input how long to toast for. Minimum 30 seconds, maximum 240 seconds. You should only respond with json. Example: 'Make it extra crispy' results in {duration: 120}.
       Here is the user's command:\n${command}`;
 
       // Call Gemini API
@@ -415,6 +439,71 @@
         segments[2].classList.add('active'); // Toasting
       }
     }
+    function getCharts() {
+      // Fetch toast history
+      fetch('/history')
+        .then(response => response.json())
+        .then(data => {
+          const tbody = document.querySelector('#toast-history tbody');
+          tbody.innerHTML = '';
+          data.slice(0, 4).forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${new Date(row.time).toLocaleString()}</td><td>${row.duration}</td>`;
+            tbody.appendChild(tr);
+          });
+        });
+
+      // Fetch calorie log and render graph
+      fetch("/calories_graph")
+        .then(res => res.json())
+        .then(data => {
+          const ctx = document.getElementById("calorieChart").getContext("2d");
+
+          // Destroy existing chart if it exists
+          if (window.calorieChartInstance) {
+            window.calorieChartInstance.destroy();
+          }
+
+          window.calorieChartInstance = new Chart(ctx, {
+            type: "line",
+            data: {
+              labels: data.map(entry => new Date(entry.time).toLocaleTimeString()),
+              datasets: [{
+                label: "Net Calories",
+                data: data.map(entry => entry.calories),
+                borderColor: "rgba(255, 99, 132, 1)",
+                backgroundColor: "rgba(255, 99, 132, 0.2)",
+                tension: 0.3,
+              }]
+            },
+            options: {
+              plugins: {
+                legend: {
+                  display: false
+                }
+              },
+              scales: {
+                x: {
+                  title: {
+                    display: true,
+                    text: "Time"
+                  }
+                },
+                y: {
+                  title: {
+                    display: true,
+                    text: "Calories"
+                  },
+                  beginAtZero: true
+                }
+              }
+            }
+          });
+        });
+    }
+
+    setInterval(getCharts, 10000);
+    getCharts();
   </script>
 </body>
 </html>
