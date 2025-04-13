@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Tart</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #fdf3e7;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      background-color: #ff6f61;
+      color: white;
+    }
+    .main {
+      padding: 2rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+    .card {
+      background-color: white;
+      padding: 1rem 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-evenly;
+    }
+    
+    .profile-btns button {
+      margin: 1rem;
+      padding: 1rem 2rem;
+      font-size: 1.5rem;
+      border: none;
+      border-radius: 12px;
+      background-color: #ffb347;
+      color: white;
+      cursor: pointer;
+      width: 100%;
+      max-width: 250px;
+      display: block;
+    }
+
+    .profile-btns button:hover {
+      background-color: #ff9f1c;
+    }
+    .toast-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .ai-button {
+      padding: 1rem 2rem;
+      font-size: 1.5rem;
+      background-color: #87cefa;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      width: 100%;
+      max-width: 250px;
+      height: calc(4 * 2.5rem); /* 3 buttons height + margin spacing */
+    }
+
+    .ai-button:hover {
+      background-color: #5eb1e9;
+    }
+
+    .modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
+    }
+    .modal-content {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      width: 50%;
+    }
+    .close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 30px;
+      color: black;
+      cursor: pointer;
+    }
+
+    .temp-grid {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .gauge {
+      display: flex;
+      width: 100%;
+      max-width: 350px; /* was 250px */
+      border-radius: 8px;
+      overflow: hidden;
+      height: 2.5rem;
+      font-weight: bold;
+      font-size: 0.9rem;
+      text-align: center;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .gauge-segment {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #e0e0e0;
+      color: #333;
+      transition: background-color 0.3s;
+    }
+
+    .gauge-segment.active {
+      background-color: #ff6f61;
+      color: white;
+    }
+
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Smart Tart</h1>
+    <div id="datetime"></div>
+  </header>
+
+  <div class="main">
+    <div class="card">
+      <h2>Tart Toast Profiles</h2>
+      <div class="toast-grid">
+        <div class="profile-btns">
+          <button onclick="sendProfile('light')">Light</button>
+          <button onclick="sendProfile('medium')">Medium</button>
+          <button onclick="sendProfile('crispy')">Crispy</button>
+        </div>
+        <div class="ai-toast">
+          <button class="ai-button" onclick="showModal()">AI Toast</button>
+        </div>
+      </div>
+    </div>    
+
+    <!-- Modal for Voice Input -->
+    <div id="voiceModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <h2>Speak Your Toast Preference</h2>
+
+        <button id="startBtn" onclick="startListening()">Start Listening</button>
+        <button id="stopBtn" onclick="stopListening()">Stop Listening</button>
+
+        <p id="transcription">Waiting for voice input...</p>
+
+        <div id="actionButtons" style="display: none; margin-top: 1rem;">
+          <button onclick="confirmToast()">Toast</button>
+          <button onclick="retryListening()">Try Again</button>
+        </div>
+      </div>
+    </div>
+
+
+    <div class="card">
+      <h2>Toasting Stats</h2>
+      <p>Poptarts Toasted: <span id="tarts">0</span></p>
+      <p>Calories Consumed: <span id="calories">0</span> kcal</p>
+      <p>Steps Walked: <span id="steps">0</span></p>
+      <p>Calories Burned: <span id="burned">0</span> kcal</p>
+      <p>Net Calories: <span id="net">0</span> kcal</p>
+    </div>
+
+    <div class="card">
+      <h2>Temperature Control</h2>
+      <div class="temp-grid">
+        <p style="font-size: 1.5rem;">Current Temp: <span id="currentTemp">--</span> °C</p>
+        <div class="gauge">
+          <div class="gauge-segment" id="segment1">Heating Up</div>
+          <div class="gauge-segment" id="segment2">Ready to Toast</div>
+          <div class="gauge-segment" id="segment3">Toasting</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function updateDateTime() {
+      const now = new Date();
+      document.getElementById("datetime").textContent = now.toLocaleString();
+    }
+    setInterval(updateDateTime, 1000);
+    updateDateTime();
+
+    function sendProfile(profile) {
+      fetch('/set_profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile })
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log(data);
+      });
+    }
+
+    async function fetchStats() {
+      const res = await fetch('/stats');
+      const data = await res.json();
+      const tarts = data.tarts;
+      const steps = data.steps;
+      const calories = tarts * 200;
+      const burned = Math.floor(steps / 27);
+      const net = calories - burned;
+
+      document.getElementById('tarts').textContent = tarts;
+      document.getElementById('steps').textContent = steps;
+      document.getElementById('calories').textContent = calories;
+      document.getElementById('burned').textContent = burned;
+      document.getElementById('net').textContent = net;
+
+      document.getElementById('currentTemp').textContent = data.current_temp;
+      updateTempDisplay(data.current_temp);
+    }
+
+    setInterval(fetchStats, 10000);
+    fetchStats();
+
+    // Show and Hide Modal
+    function showModal() {
+      document.getElementById("voiceModal").style.display = "flex";
+    }
+
+    function closeModal() {
+      document.getElementById("voiceModal").style.display = "none";
+    }
+
+    // Speech-to-Text Setup
+    let recognition;
+    let isListening = false;
+    let lastTranscript = ''; 
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const actionButtons = document.getElementById('actionButtons');
+    const transcription = document.getElementById('transcription');
+
+    function hideListeningButtons() {
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'none';
+    }
+
+    function showListeningButtons(startVisible = true, stopVisible = true) {
+      startBtn.style.display = startVisible ? 'inline-block' : 'none';
+      stopBtn.style.display = stopVisible ? 'inline-block' : 'none';
+    }
+
+    if ('webkitSpeechRecognition' in window) {
+      recognition = new webkitSpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        isListening = true;
+        lastTranscript = '';
+        transcription.innerText = 'Listening...';
+        actionButtons.style.display = 'none';
+        showListeningButtons(false, true); // hide Start, show Stop
+      };
+
+      recognition.onresult = (event) => {
+        lastTranscript = event.results[0][0].transcript;
+        transcription.innerText = `You said: "${lastTranscript}"`;
+        hideListeningButtons(); // hide Start & Stop when finished
+        actionButtons.style.display = 'block';
+      };
+
+      recognition.onerror = () => {
+        transcription.innerText = 'Error occurred. Please try again.';
+        hideListeningButtons();
+        actionButtons.style.display = 'block';
+      };
+
+      recognition.onend = () => {
+        isListening = false;
+        if (!lastTranscript) {
+          transcription.innerText = 'No speech detected. Try again.';
+          hideListeningButtons();
+          actionButtons.style.display = 'block';
+        }
+      };
+    }
+
+    function startListening() {
+      if (!isListening) recognition.start();
+    }
+    
+    function stopListening() {
+      if (isListening) recognition.stop();
+    }
+    
+    function confirmToast() {
+      if (lastTranscript) {
+        handleVoiceCommand(lastTranscript);
+        document.getElementById('actionButtons').style.display = 'none';
+        closeModal();
+      }
+    }
+
+    function retryListening() {
+      lastTranscript = '';
+      transcription.innerText = 'Listening...';
+      actionButtons.style.display = 'none';
+      showListeningButtons(false, true); // show only Stop
+      recognition.start();
+    }
+    async function handleVoiceCommand(command) {
+      // Create a prompt that instructs Gemini how to process the command
+      const prompt = `You are being used to generate json outputs from strings. You will be given a user-made string describing some toast level. You will have to decide based on the user input how long to toast for. Minimum 15 seconds, maximum 120 seconds. You should only respond with json. Example: 'Make it extra crispy' results in {duration: 120}.
+      Here is the user's command:\n${command}`;
+
+      // Call Gemini API
+      const response = await fetch(
+        'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=AIzaSyA8i_bTMJ_7Drq4rTIfUHAlmGf0d4RYZ8I',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: prompt }]
+            }]
+          }),
+        }
+      );
+      const data = await response.json();
+
+      // Parse the response to extract toast settings
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        try {
+          const responseText = data.candidates[0].content.parts[0].text;
+          
+          // Extract the JSON from the response
+          // Strip any markdown code formatting if present
+          const jsonStr = responseText.replace(/```json|```|\n/g, '').trim();
+          const toastSetting = JSON.parse(jsonStr);
+          
+          if (toastSetting && toastSetting.duration) {
+            sendToastSettingToESP32(toastSetting.duration);
+          } else {
+            console.log('Invalid toast setting from response:', toastSetting);
+            alert('Sorry, I couldn\'t understand the toast preference.');
+          }
+        } catch (error) {
+          console.error('Error parsing Gemini response:', error);
+          alert('Error processing your command.');
+        }
+      } else {
+        console.log('Unexpected response structure:', data);
+        alert('Error processing your command.');
+      }
+    }
+
+    // Send the toast setting to ESP32 via Flask backend
+    async function sendToastSettingToESP32(toastSetting) {
+      const response = await fetch('/set_profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: toastSetting })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(result);
+      } else {
+        alert('Failed to update toast setting.');
+      }
+    }
+
+    function updateTempDisplay(temp) {
+      const currentTempEl = document.getElementById('currentTemp');
+      const segments = [
+        document.getElementById('segment1'),
+        document.getElementById('segment2'),
+        document.getElementById('segment3'),
+      ];
+
+      currentTempEl.textContent = temp;
+
+      // Reset all segments
+      segments.forEach(seg => seg.classList.remove('active'));
+      console.log()
+      if (temp < 50) {
+        segments[0].classList.add('active'); // Heating Up
+      } else if (temp < 100) {
+        segments[1].classList.add('active'); // Ready to Toast
+      } else {
+        segments[2].classList.add('active'); // Toasting
+      }
+    }
+  </script>
+</body>
+</html>
