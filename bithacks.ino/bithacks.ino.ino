@@ -3,6 +3,13 @@
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_LSM6DSOX.h>
 #include "pitches.h"
+#include <WiFi.h>
+#include <HTTPClient.h>
+
+const char* ssid = "Michael";
+const char* password = "Ipisbest";
+const char* serverName = "http://169.234.12.169:5000/test_send";
+
 Adafruit_LSM6DSOX sox;
 
 #define SCREEN_WIDTH 128
@@ -37,7 +44,6 @@ int toasts = 0;
 unsigned long lastStepTime = 0;
 const unsigned long stepCooldown = 300; // Minimum time between steps (ms)
 
-
 // Toast Countdown
 bool toasting = false;
 unsigned long toastStartTime = 0;
@@ -53,7 +59,7 @@ int jeopardyMelody[] = {
   NOTE_C5, NOTE_F5, NOTE_C5,
   NOTE_AS5, 0, NOTE_G5, NOTE_F5,
   NOTE_E5, NOTE_D5, NOTE_CS5, 0,
-  NOTE_A4, NOTE_F5, NOTE_C5, NOTE_A4,
+NOTE_A4, NOTE_F5, NOTE_C5, NOTE_A4,
   NOTE_C5, NOTE_F5, NOTE_C5,
   NOTE_C5, NOTE_F5, NOTE_C5, NOTE_F5,
   NOTE_AS5, NOTE_G5, NOTE_F5, NOTE_E5, NOTE_D5, NOTE_CS5,
@@ -73,7 +79,7 @@ int jeopardyDurations[] = {
   4,    4,          2,
   4, 8, 8,    4,    4,
   4,    4,    4,    4,
-  4,    4,    4,    4,
+4,    4,    4,    4,
   4,    4,          2,
   4,    4,    4,    4,
   3,   8, 8, 8, 8, 8,
@@ -130,6 +136,20 @@ void setup() {
   digitalWrite(relayPin, relayState ? HIGH : LOW);
 
   pinMode(Pushbutton, INPUT_PULLUP);
+
+  //WIFI
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.println("Connected to WiFi!");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
 }
 
 void loop() {
@@ -258,6 +278,33 @@ void loop() {
     display.print("TOASTS: ");
     display.println(toasts);
     display.display();
+  }
+
+  //////////WIFI///////////////////
+
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(serverName);
+    http.addHeader("Content-Type", "application/json");
+
+    String jsonPayload = "{";
+    jsonPayload += "\"tarts\": " + String(toasts) + ",";
+    jsonPayload += "\"steps\": " + String(steps);
+    jsonPayload += "}";    
+
+    int httpResponseCode = http.POST(jsonPayload);
+
+    if (httpResponseCode > 0) {
+      String response = http.getString();
+      Serial.println("Server response: " + response);
+    } else {
+      Serial.print("Error code: ");
+      Serial.println(httpResponseCode);
+    }
+
+    http.end();
+  } else {
+    Serial.println("WiFi not connected");
   }
 
   delay(100);
