@@ -54,7 +54,7 @@ const unsigned long stepCooldown = 300; // Minimum time between steps (ms)
 // Toast Countdown
 bool toasting = false;
 unsigned long toastStartTime = 0;
-const unsigned long toastDuration = 60000; // 60 seconds
+unsigned long toastDuration = 60000; // 60 seconds by default
 
 // Jeopardy
 int jeopardyMelody[] = {
@@ -146,8 +146,42 @@ unsigned long jeoNoteStart = 0;
 bool jeopardyDone = false;
 int currentNoteDuration = 0;
 
-void setup() {
+// Function to start toasting process with specified duration
+void startToasting(unsigned long duration) {
+  // Only start if not already toasting
+  if (!toasting) {
+    relayState = true;
+    digitalWrite(relayPin, HIGH);
+    toasting = true;
+    toastStartTime = millis();
+    toastDuration = duration; // Use the provided duration
+    Serial.print("Toasting started for ");
+    Serial.print(duration / 1000);
+    Serial.println(" seconds!");
+    
+    // Reset jeopardy tune variables
+    preEndBeeped = false;
+    jeoIndex = 0;
+    jeoNoteStart = 0;
+    jeopardyDone = false;
+    currentNoteDuration = 0;
+  } else {
+    Serial.println("Toasting already in progress!");
+  }
+}
 
+// Function to stop toasting process
+void stopToasting() {
+  if (toasting) {
+    toasting = false;
+    relayState = false;
+    digitalWrite(relayPin, LOW);
+    toasts++;
+    Serial.println("Toasting completed!");
+  }
+}
+
+void setup() {
   Wire.begin(8, 9);
   Serial.begin(115200);
   analogReadResolution(12);
@@ -213,13 +247,19 @@ void setup() {
 
       if (!error) {
         int duration = doc["duration"];
-        Serial.print("Toast duration: ");
-        Serial.println(duration);
+        unsigned long durationMs = duration * 1000; // Convert to milliseconds
+        Serial.print("Toast duration set to: ");
+        Serial.print(duration);
+        Serial.println(" seconds");
+        
+        // Call the startToasting function with the received duration
+        startToasting(durationMs);
+        
+        server.send(200, "application/json", "{\"status\":\"toasting started\",\"duration\":" + String(duration) + "}");
       } else {
         Serial.println("Failed to parse JSON");
+        server.send(400, "application/json", "{\"error\":\"Failed to parse JSON\"}");
       }
-
-      server.send(200, "application/json", "{\"status\":\"received\"}");
     } else {
       server.send(400, "application/json", "{\"error\":\"Missing profile\"}");
     }
@@ -255,17 +295,6 @@ void loop() {
     Serial.println("Step detected!");
   }
 
-  // ---- SERIAL DEBUG ----
-  // Serial.print("Accel Mag: ");
-  // Serial.print(magnitude, 2);
-  // Serial.print(" | w/o Gravity: ");
-  // Serial.print(accel_no_gravity, 2);
-  // Serial.print(" | Temp: ");
-  // Serial.print(tempC, 1);
-  // Serial.print(" °C / ");
-  // Serial.print(tempF, 1);
-  // Serial.println(" °F");
-
   // ---- BUTTON TOGGLE LOGIC ----
   int reading = digitalRead(Pushbutton);
 
@@ -278,18 +307,9 @@ void loop() {
       currentButtonState = reading;
 
       if (currentButtonState == LOW) {
-        if (!relayState && !toasting) {
-          // Start a new toasting session
-          relayState = true;
-          digitalWrite(relayPin, HIGH);
-          toasting = true;
-          toastStartTime = millis();
-          Serial.println("Toasting started!");
-          preEndBeeped = false;
-          jeoIndex = 0;
-          jeoNoteStart = 0;
-          jeopardyDone = false;
-          currentNoteDuration = 0;          
+        if (!toasting) {
+          // Start a new toasting session with default duration
+          startToasting(60000); // Default 60 seconds
         }
       }
     }
@@ -297,17 +317,24 @@ void loop() {
 
   lastButtonState = reading;
 
+  // ---- TOAST MANAGEMENT ----
+  if (toasting && (millis() - toastStartTime >= toastDuration)) {
+    stopToasting();
+  }
+
   // ---- DISPLAY ----
   display.clearDisplay();
 
   if (toasting) {
-    unsigned long timeLeft = 60 - ((millis() - toastStartTime) / 1000);
+    unsigned long timeElapsed = millis() - toastStartTime;
+    unsigned long timeLeft = toastDuration / 1000 - (timeElapsed / 1000);
     
     // Beep when 1 second remains
-  if (timeLeft == 1 && !preEndBeeped) {
-    tone(buzzerPin, 1500, 200); // Higher pitch for ending
-    preEndBeeped = true;
-  }
+    if (timeLeft == 1 && !preEndBeeped) {
+      tone(buzzerPin, 1500, 200); // Higher pitch for ending
+      preEndBeeped = true;
+    }
+    
     display.setTextSize(2);
     display.setCursor(0, 0);
     display.println("TOASTING..");
@@ -321,7 +348,7 @@ void loop() {
     display.println(timeLeft);
     display.display();
 
-     // ---- Play Jeopardy during toasting ----
+    // ---- Play Jeopardy during toasting ----
     if (!jeopardyDone && jeoIndex < sizeof(jeopardyMelody) / sizeof(jeopardyMelody[0])) {
       unsigned long elapsed = millis() - toastStartTime;
 
@@ -335,13 +362,6 @@ void loop() {
     } else if (!jeopardyDone) {
       noTone(buzzerPin);
       jeopardyDone = true;
-    }
-
-    if (millis() - toastStartTime >= toastDuration) {
-      toasting = false;
-      relayState = false;
-      digitalWrite(relayPin, LOW);
-      toasts++;
     }
   } else {
     display.setTextSize(2);
@@ -357,7 +377,7 @@ void loop() {
     display.display();
   }
 
-   //////////WIFI///////////////////
+  //////////WIFI///////////////////
   server.handleClient();
   if (WiFi.status() == WL_CONNECTED) {
     unsigned long currentMillis = millis();
@@ -387,11 +407,9 @@ void loop() {
 
       http.end();
     }
-
   } else {
     Serial.println("WiFi not connected");
   }
-
 
   delay(100);
 }
